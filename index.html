@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moulding Stock & Costing</title>
+<meta name="theme-color" content="#16222c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: shop-floor register. Tabs on top, summary strip, then one dense working table or form per view. */
+:root{
+  --bg:#eef1f3; --surface:#ffffff; --sunk:#e4e9ec; --ink:#16222c; --muted:#5a6a77; --line:#d3dbe1;
+  --accent:#b8460b; --accent-ink:#ffffff; --accent-soft:#fbe9df;
+  --good:#1d7a4c; --good-soft:#dcf1e6; --warn:#9a6700; --warn-soft:#fbefc9; --bad:#b3261e; --bad-soft:#fbe0de;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif; --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#11181e; --surface:#1a232b; --sunk:#232e38; --ink:#e7edf1; --muted:#97a6b2; --line:#32404c;
+    --accent:#f08a4b; --accent-ink:#1a0f07; --accent-soft:#3a2415;
+    --good:#5fcf95; --good-soft:#173527; --warn:#e6b84a; --warn-soft:#3a2f10; --bad:#f2867f; --bad-soft:#3f1b19;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#11181e; --surface:#1a232b; --sunk:#232e38; --ink:#e7edf1; --muted:#97a6b2; --line:#32404c;
+  --accent:#f08a4b; --accent-ink:#1a0f07; --accent-soft:#3a2415;
+  --good:#5fcf95; --good-soft:#173527; --warn:#e6b84a; --warn-soft:#3a2f10; --bad:#f2867f; --bad-soft:#3f1b19;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--body);font-variant-numeric:tabular-nums}
+.wrap{max-width:1180px;margin:0 auto;padding:20px 16px 48px;display:flex;flex-direction:column;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font:700 30px/1 var(--display);letter-spacing:.02em;text-transform:uppercase;margin:0;text-wrap:balance}
+h1 span{color:var(--accent)}
+h2{font:600 20px/1.1 var(--display);letter-spacing:.03em;text-transform:uppercase;margin:0}
+nav{display:flex;gap:4px;background:var(--sunk);padding:4px;border-radius:8px}
+nav a{padding:7px 14px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:500}
+nav a.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.note{padding:9px 12px;border-radius:8px;background:var(--warn-soft);color:var(--ink);border-left:4px solid var(--warn);display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.tile small{color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:11.5px;font-weight:600}
+.tile b{font:600 28px/1.1 var(--display)}
+.tile em{font-style:normal;color:var(--muted);font-size:13px}
+.tile.alert{border-color:var(--bad);background:var(--bad-soft)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.bar .grp{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,.btn{font:500 14px var(--body);padding:7px 12px;border-radius:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--muted)}
+button.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+button.sm{padding:3px 8px;font-size:13px}
+button.danger{color:var(--bad)}
+button:disabled{opacity:.5;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input,select{font:400 14px var(--body);padding:7px 9px;border-radius:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);width:100%;min-width:0}
+.bar select,.bar input{width:auto}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:640px}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;padding:6px 10px;border-bottom:2px solid var(--line);white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+td.n,th.n{text-align:right;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td .sub{display:block;color:var(--muted);font-size:12.5px;font-weight:400}
+#txnrows tr.row td:first-child{white-space:nowrap}
+.pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600;white-space:nowrap}
+.pill.ok{background:var(--good-soft);color:var(--good)}
+.pill.low{background:var(--warn-soft);color:var(--warn)}
+.pill.out{background:var(--bad-soft);color:var(--bad)}
+.pill.ex{background:var(--sunk);color:var(--muted)}
+.in{color:var(--good);font-weight:600}.outq{color:var(--bad);font-weight:600}
+.acts{display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap}
+.empty{color:var(--muted);padding:22px 8px;text-align:center}
+.cost{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px;align-items:start}
+@media (max-width:820px){.cost{grid-template-columns:1fr}}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.form label,.dform label{display:flex;flex-direction:column;justify-content:flex-end;gap:3px;font-size:12.5px;color:var(--muted);font-weight:500}
+.form .wide{grid-column:1/-1}
+fieldset{border:0;border-top:1px solid var(--line);padding:10px 0 0;margin:0;display:flex;flex-direction:column;gap:8px}
+legend{font:600 14px var(--display);text-transform:uppercase;letter-spacing:.06em;color:var(--accent);padding:0 8px 0 0}
+.lines{display:flex;flex-direction:column}
+.lines div{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px dashed var(--line)}
+.lines div.tot{border-bottom:0;border-top:2px solid var(--ink);margin-top:4px;padding-top:8px;font:600 22px var(--display)}
+.lines div.sell{border:0;color:var(--accent);font-weight:600}
+.lines i{font-style:normal;display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:7px}
+.stack{display:flex;height:16px;border-radius:4px;overflow:hidden;background:var(--sunk)}
+.stack span{height:100%}
+.facts{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.facts div{background:var(--sunk);border-radius:8px;padding:8px 10px}
+.facts small{display:block;color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em}
+.facts b{font:600 19px var(--display)}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);padding:18px;width:min(460px,calc(100vw - 32px))}
+dialog::backdrop{background:rgba(10,16,22,.55)}
+.dform{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.dform .wide{grid-column:1/-1}
+.dform .chk{flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:14px}
+.dform .chk input{width:auto}
+.dfoot{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.hint{color:var(--muted);font-size:13px;margin:0}
+.hint.w{color:var(--bad)}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:8px;max-width:calc(100vw - 32px);display:none;z-index:9}
+[hidden]{display:none!important}
+/* Login and setup messages */
+#gate{align-items:center;padding-top:min(14vh,120px)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:22px;width:min(420px,100%);display:flex;flex-direction:column;gap:14px}
+.card form{display:flex;flex-direction:column;gap:10px}
+.card label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted);font-weight:500}
+.card p{margin:0}
+.card .msg{font-size:15px;color:var(--ink)}
+.err{color:var(--bad);font-size:13.5px}
+.foot{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;color:var(--muted);font-size:13px}
+.foot .grp{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+/* Phone: tables become stacked cards, two summary tiles per row, larger touch targets */
+@media (max-width:640px){
+  h1{font-size:26px}
+  nav{width:100%}
+  nav a{flex:1;text-align:center;padding:9px 6px}
+  .tiles{grid-template-columns:1fr 1fr;gap:8px}
+  .tile{padding:10px 12px}
+  .tile b{font-size:23px}
+  input,select{font-size:16px}
+  .bar .grp{width:100%}
+  .bar .grp select,.bar .grp input{flex:1 1 140px}
+  table{min-width:0}
+  thead{display:none}
+  tbody,tr,td{display:block}
+  td{border:0;padding:0}
+  td.n{white-space:normal}
+  tr{padding:12px 0;border-bottom:1px solid var(--line)}
+  tr:last-child{border-bottom:0}
+  tr.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 12px;align-items:baseline}
+  #stockrows tr.row{grid-template-areas:"name status" "cat qty" "rate value" "acts acts"}
+  #stockrows td:nth-child(1){grid-area:name;font-size:16px}
+  #stockrows td:nth-child(2){grid-area:cat;color:var(--muted)}
+  #stockrows td:nth-child(3){grid-area:qty;font-weight:600}
+  #stockrows td:nth-child(4){grid-area:rate;text-align:left}
+  #stockrows td:nth-child(5){grid-area:value}
+  #stockrows td:nth-child(6){grid-area:status;text-align:right}
+  #stockrows td:nth-child(7){grid-area:acts}
+  #stockrows td:nth-child(4)::before{content:"Cost / unit ";color:var(--muted);font-size:12.5px}
+  #stockrows td:nth-child(5)::before{content:"Value ";color:var(--muted);font-size:12.5px}
+  #txnrows tr.row{grid-template-areas:"item amt" "type qty" "date rate" "ref act"}
+  #txnrows td:nth-child(1){grid-area:date;color:var(--muted);font-size:13px}
+  #txnrows td:nth-child(2){grid-area:type}
+  #txnrows td:nth-child(3){grid-area:item;font-size:16px;font-weight:600}
+  #txnrows td:nth-child(4){grid-area:qty}
+  #txnrows td:nth-child(5){grid-area:rate;color:var(--muted);font-size:13px}
+  #txnrows td:nth-child(6){grid-area:amt;font-weight:600}
+  #txnrows td:nth-child(7){grid-area:ref;color:var(--muted);font-size:13px}
+  #txnrows td:nth-child(8){grid-area:act}
+  #txnrows td:nth-child(5)::before{content:"Rate "}
+  .acts{justify-content:flex-start;padding-top:8px;gap:8px}
+  #txnrows .acts{justify-content:flex-end;padding-top:0}
+  .acts button.sm{padding:7px 12px;font-size:14px}
+}
+@media (prefers-reduced-motion:no-preference){button,nav a{transition:background .12s,border-color .12s}}
+</style>
+</head>
+<body>
+<div class="wrap" id="gate">
+  <div class="card">
+    <h1>Moulding <span>Stock &amp; Costing</span></h1>
+    <p class="msg" id="gateMsg">Loading…</p>
+    <form id="loginForm" hidden>
+      <label>Email<input id="g_email" type="email" autocomplete="username" required></label>
+      <label>Password<input id="g_pw" type="password" autocomplete="current-password" required></label>
+      <p class="err" id="g_err" hidden></p>
+      <button class="pri" id="g_btn">Log in</button>
+    </form>
+    <button type="button" id="g_retry" hidden>Try again</button>
+    <button type="button" id="g_out" hidden>Log out</button>
+  </div>
+</div>
+
+<div class="wrap" id="app" hidden>
+  <header>
+    <h1>Moulding <span>Stock &amp; Costing</span></h1>
+    <nav aria-label="Sections">
+      <a href="#stock" data-v="stock">Stock</a>
+      <a href="#costing" data-v="costing">Production cost</a>
+      <a href="#ledger" data-v="ledger">Transactions</a>
+    </nav>
+  </header>
+
+  <div class="note" id="status" hidden></div>
+  <div class="note" id="exnote" hidden>
+    <span>The rows marked <span class="pill ex">example</span> are sample data so you can see how it works. Remove them when you add your own.</span>
+    <button id="exclear" class="sm">Remove example data</button>
+  </div>
+
+  <section class="tiles" id="tiles"></section>
+
+  <!-- STOCK -->
+  <section class="panel" id="v-stock">
+    <div class="bar">
+      <div class="grp"><h2>Stock on hand</h2>
+        <select id="s_cat" aria-label="Filter by category"></select>
+        <input id="s_q" type="search" placeholder="Search item" aria-label="Search item">
+      </div>
+      <div class="grp"><button class="pri" id="b_newitem">Add item</button><button id="b_newtxn">Record transaction</button></div>
+    </div>
+    <div class="scroll"><table>
+      <thead><tr><th>Item</th><th>Category</th><th class="n">In stock</th><th class="n">Cost / unit</th><th class="n">Stock value</th><th>Status</th><th></th></tr></thead>
+      <tbody id="stockrows"></tbody>
+    </table></div>
+  </section>
+
+  <!-- COSTING -->
+  <section class="cost" id="v-costing" hidden>
+    <div class="panel">
+      <div class="bar">
+        <div class="grp"><h2>Part costing sheet</h2><select id="c_pick" aria-label="Open a saved part"></select></div>
+        <div class="grp"><button id="c_new">New part</button></div>
+      </div>
+      <div class="form" id="cform">
+        <label class="wide">Part name<input id="c_name" placeholder="e.g. Switch housing"></label>
+        <fieldset class="wide"><legend>Material</legend><div class="form">
+          <label>Resin<select id="c_material"></select></label>
+          <label>Part weight (g)<input id="c_partWt" type="number" min="0" step="0.01"></label>
+          <label>Runner weight per shot (g)<input id="c_runnerWt" type="number" min="0" step="0.01"></label>
+          <label>Runner reused as regrind (%)<input id="c_regrind" type="number" min="0" max="100" step="1"></label>
+          <label>Masterbatch<select id="c_mb"></select></label>
+          <label>Masterbatch dosing (%)<input id="c_mbPct" type="number" min="0" step="0.1"></label>
+        </div></fieldset>
+        <fieldset class="wide"><legend>Machine and labour</legend><div class="form">
+          <label>Cavities<input id="c_cav" type="number" min="1" step="1"></label>
+          <label>Cycle time (s)<input id="c_cycle" type="number" min="0" step="0.1"></label>
+          <label>Machine uptime (%)<input id="c_uptime" type="number" min="1" max="100" step="1"></label>
+          <label>Machine rate incl. power (₹/hr)<input id="c_machine" type="number" min="0" step="1"></label>
+          <label>Labour (₹/hr)<input id="c_labour" type="number" min="0" step="1"></label>
+          <label>Rejection (%)<input id="c_reject" type="number" min="0" max="99" step="0.1"></label>
+        </div></fieldset>
+        <fieldset class="wide"><legend>Mould, packing, overhead</legend><div class="form">
+          <label>Mould cost (₹)<input id="c_mouldCost" type="number" min="0" step="1"></label>
+          <label>Mould life (shots)<input id="c_mouldLife" type="number" min="0" step="1"></label>
+          <label>Packing (₹/pc)<input id="c_packing" type="number" min="0" step="0.01"></label>
+          <label>Overhead (%)<input id="c_overhead" type="number" min="0" step="0.1"></label>
+          <label>Margin (%)<input id="c_margin" type="number" min="0" step="0.1"></label>
+          <label>Finished stock item<select id="c_item"></select></label>
+        </div></fieldset>
+      </div>
+      <div class="bar">
+        <div class="grp"><button class="pri" id="c_save">Save costing sheet</button><button id="c_run">Log production run</button></div>
+        <button class="danger" id="c_del">Delete part</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Cost per piece</h2>
+      <div class="stack" id="c_stack" aria-hidden="true"></div>
+      <div class="lines" id="c_lines"></div>
+      <div class="facts" id="c_facts"></div>
+      <p class="hint">Resin and masterbatch prices come from the Stock tab. Change a cost there and every sheet recalculates.</p>
+    </div>
+  </section>
+
+  <!-- LEDGER -->
+  <section class="panel" id="v-ledger" hidden>
+    <div class="bar">
+      <div class="grp"><h2>Transactions</h2>
+        <select id="l_type" aria-label="Filter by type"></select>
+        <select id="l_item" aria-label="Filter by item"></select>
+        <input id="l_month" type="month" aria-label="Filter by month">
+      </div>
+      <div class="grp"><button class="pri" id="b_newtxn2">Record transaction</button><button id="b_csv">Download CSV</button></div>
+    </div>
+    <div class="scroll"><table>
+      <thead><tr><th>Date</th><th>Type</th><th>Item</th><th class="n">Qty</th><th class="n">Rate</th><th class="n">Amount</th><th>Reference</th><th></th></tr></thead>
+      <tbody id="txnrows"></tbody>
+    </table></div>
+    <p class="hint" id="l_tot"></p>
+  </section>
+
+  <footer class="foot">
+    <span id="who"></span>
+    <span class="grp"><button class="sm" id="b_refresh">Refresh</button><button class="sm" id="b_backup">Download backup</button><button class="sm" id="b_logout">Log out</button></span>
+  </footer>
+</div>
+
+<dialog id="d_item"><h2 id="di_title">Add item</h2>
+  <form class="dform" id="f_item">
+    <label class="wide">Item name<input id="i_name" required></label>
+    <label>Category<select id="i_cat"></select></label>
+    <label>Unit<select id="i_unit"><option>kg</option><option>pcs</option><option>litre</option><option>set</option></select></label>
+    <label>Cost per unit (₹)<input id="i_rate" type="number" min="0" step="0.0001" required></label>
+    <label>Reorder level<input id="i_reorder" type="number" min="0" step="0.001"></label>
+    <label class="wide" id="i_openwrap">Opening stock<input id="i_open" type="number" min="0" step="0.001"></label>
+    <div class="dfoot wide"><button type="button" class="danger" id="i_del" hidden>Delete item</button><button type="button" data-close>Cancel</button><button class="pri">Save</button></div>
+  </form>
+</dialog>
+
+<dialog id="d_txn"><h2>Record transaction</h2>
+  <form class="dform" id="f_txn">
+    <label>Date<input id="t_date" type="date" required></label>
+    <label>Type<select id="t_type"></select></label>
+    <label class="wide">Item<select id="t_item" required></select></label>
+    <label>Quantity<input id="t_qty" type="number" step="0.001" required></label>
+    <label>Rate (₹ per unit)<input id="t_rate" type="number" min="0" step="0.0001" required></label>
+    <label class="wide">Reference or note<input id="t_ref" placeholder="Bill no., customer, job no."></label>
+    <label class="wide chk" id="t_avgwrap"><input id="t_avg" type="checkbox" checked>Update item cost to the weighted average</label>
+    <p class="hint wide" id="t_hint"></p>
+    <div class="dfoot wide"><button type="button" data-close>Cancel</button><button class="pri">Record</button></div>
+  </form>
+</dialog>
+
+<dialog id="d_run"><h2>Log production run</h2>
+  <form class="dform" id="f_run">
+    <label>Date<input id="r_date" type="date" required></label>
+    <label>Job or batch no.<input id="r_ref"></label>
+    <label>Good pieces<input id="r_good" type="number" min="1" step="1" required></label>
+    <label>Rejected pieces<input id="r_rej" type="number" min="0" step="1"></label>
+    <p class="hint wide" id="r_hint"></p>
+    <div class="dfoot wide"><button type="button" data-close>Cancel</button><button class="pri">Post run</button></div>
+  </form>
+</dialog>
+
+<div id="toast" role="status"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const num=v=>{const n=parseFloat(v);return isFinite(n)?n:0};
+const r3=n=>Math.round(n*1000)/1000, r4=n=>Math.round(n*10000)/10000, r2=n=>Math.round(n*100)/100;
+const inr=new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:2});
+const inr0=new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0});
+const qf=new Intl.NumberFormat("en-IN",{maximumFractionDigits:3});
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
+const CATS=["Resin","Masterbatch","Insert / hardware","Packaging","Finished part","Other"];
+const TYPES={Opening:1,Purchase:1,"Issue to production":-1,"Production output":1,"Sale / dispatch":-1,Scrap:-1,Adjustment:0,"Rate change":0};
+const MANUAL=["Purchase","Sale / dispatch","Issue to production","Scrap","Adjustment","Opening"];
+
+const S={items:new Map(),parts:new Map(),txns:new Map()};
+let sb=null, cur=null, editItem=null, entered=false, busy=0;
+
+function toast(m){const t=$("toast");t.textContent=m;t.style.display="block";clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display="none",3800)}
+const NET=/failed to fetch|networkerror|load failed|no connection/i;
+function fail(e){
+  const m=(e&&e.message)||"";
+  if((e&&e.code==="42501")||/row-level security|cannot change stock|permission denied/i.test(m))toast("This login is not allowed to change Stock & Costing.");
+  else if(/\bjwt\b|token.{0,20}expired|expired.{0,20}token/i.test(m))toast("Your login has expired. Reload the page and log in again.");
+  else if(NET.test(m))toast("No connection, so nothing was saved. Check the internet and try again.");
+  else toast("Couldn’t save"+(m?": "+m:". Try again."));
+}
+/* Runs one save at a time per button, so a double click cannot record a transaction twice. */
+async function guard(btn,f){
+  if(btn&&btn.disabled)return;
+  if(btn)btn.disabled=true;
+  try{await f()}catch(err){fail(err)}finally{if(btn)btn.disabled=false}
+}
+function download(name,text,type){
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:type}));a.download=name;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+
+/* ---------- storage: one Supabase table, mfg_docs (id, coll, data) ---------- */
+const T="mfg_docs", TXN_MAX=5000;
+const ok=r=>{if(r.error)throw r.error;return r.data};
+const w=async f=>{busy++;try{return await f()}finally{busy--}};
+const put=(col,id,data)=>w(async()=>{ok(await sb.from(T).upsert({id:id,coll:col,data:data}));S[col].set(id,data);render()});
+const patch=(col,id,data)=>w(async()=>{ok(await sb.rpc("mfg_merge",{p_id:id,p_patch:data}));if(S[col].has(id))S[col].set(id,{...S[col].get(id),...data});render()});
+const del=(col,id)=>w(async()=>{ok(await sb.from(T).delete().eq("id",id));S[col].delete(id);render()});
+const wavg=(it,q,rate)=>{const cq=Math.max(0,num(it.qty));return cq+q>0?(cq*num(it.rate)+q*rate)/(cq+q):rate};
+/* Re-read items whose stock the database has just changed. */
+async function pull(ids){
+  if(!ids.length)return;
+  const r=await sb.from(T).select("id,data").in("id",ids);
+  if(!r.error)for(const x of r.data)S.items.set(x.id,x.data||{});
+}
+/* Record transactions and move stock in one database step: all of them are saved, or none.
+   list = [{t:{...transaction}, avg:true|false}]; avg moves the item's cost to the weighted average. */
+const post=list=>w(async()=>{
+  const now=Date.now(), rows=list.map((x,i)=>({id:uid(),data:{...x.t,ts:now+i},avg:!!x.avg}));
+  ok(await sb.rpc("mfg_post",{p_txns:rows}));
+  for(const r of rows){
+    S.txns.set(r.id,r.data);
+    const it=S.items.get(r.data.itemId);
+    if(it)S.items.set(r.data.itemId,{...it,qty:r3(num(it.qty)+num(r.data.qty)),rate:r.avg&&r.data.qty>0?r4(wavg(it,r.data.qty,num(r.data.rate))):it.rate});
+  }
+  await pull([...new Set(rows.map(r=>r.data.itemId).filter(Boolean))]);
+  render();
+});
+const delTxn=id=>w(async()=>{
+  const t=S.txns.get(id);
+  ok(await sb.rpc("mfg_delete_txn",{p_id:id}));
+  S.txns.delete(id);
+  const it=t&&S.items.get(t.itemId);
+  if(it){S.items.set(t.itemId,{...it,qty:r3(num(it.qty)-num(t.qty))});await pull([t.itemId])}
+  render();
+});
+async function loadColl(c,max){
+  const rows=new Map();
+  for(let from=0;from<max;from+=1000){
+    const d=ok(await sb.from(T).select("id,data").eq("coll",c).order("id",{ascending:false}).range(from,from+999));
+    d.forEach(x=>rows.set(x.id,x.data||{}));
+    if(d.length<1000)break;
+  }
+  return rows;
+}
+async function loadAll(){
+  const[items,parts,txns]=await Promise.all([loadColl("items",20000),loadColl("parts",20000),loadColl("txns",TXN_MAX)]);
+  if(busy)return;                       /* a save is in flight; it updates the screen itself */
+  S.items=items;S.parts=parts;S.txns=txns;
+}
+async function refresh(loud){
+  if(!entered||busy)return;
+  try{await loadAll();$("status").hidden=true;render();if(loud)toast("Up to date")}
+  catch(e){$("status").hidden=false;$("status").textContent="The data couldn’t be refreshed. Check the internet connection. What you see may be out of date."}
+}
+/* Changes made on another phone or computer show up here: live when Supabase sends them, and every minute as a fallback. */
+function live(){
+  try{
+    sb.channel("mfg-live").on("postgres_changes",{event:"*",schema:"public",table:T},p=>{
+      if(p.eventType==="DELETE"){const id=p.old&&p.old.id;for(const c of ["items","parts","txns"])S[c].delete(id)}
+      else if(p.new&&S[p.new.coll])S[p.new.coll].set(p.new.id,p.new.data||{});
+      clearTimeout(live.t);live.t=setTimeout(render,200);
+    }).subscribe();
+  }catch(e){}
+  setInterval(()=>{if(!document.hidden)refresh()},60000);
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});
+}
+
+/* ---------- login and start ---------- */
+function gate(msg,form,out,retry){
+  $("app").hidden=true;$("gate").hidden=false;
+  $("gateMsg").textContent=msg;$("loginForm").hidden=!form;$("g_out").hidden=!out;$("g_retry").hidden=!retry;
+}
+async function logout(){try{await sb.auth.signOut()}catch(e){}location.reload()}
+function showLogin(){gate("Log in with the admin email and password you use for Mould CRM.",true,false,false)}
+async function submitLogin(e){
+  e.preventDefault();
+  const err=$("g_err"),btn=$("g_btn");
+  err.hidden=true;btn.disabled=true;
+  let r;
+  try{r=await sb.auth.signInWithPassword({email:$("g_email").value.trim(),password:$("g_pw").value})}catch(x){r={error:{message:"no connection"}}}
+  btn.disabled=false;
+  if(r.error||!r.data||!r.data.session){
+    const m=r.error?r.error.message||"":"";
+    err.textContent=/invalid/i.test(m)?"Wrong email or password.":NET.test(m)?"No connection. Check the internet and try again.":"Couldn’t log in"+(m?": "+m:".");
+    err.hidden=false;return;
+  }
+  $("g_pw").value="";
+  enter(r.data.session);
+}
+async function enter(session){
+  if(entered)return;
+  gate("Loading…",false,false,false);
+  let p;
+  try{p=await sb.from("profiles").select("name,email,role").eq("id",session.user.id)}catch(x){p={error:{message:"no connection"}}}
+  if(p.error){
+    gate(NET.test(p.error.message||"")?"No connection. Check the internet and try again.":"The database is not set up yet. Run the Mould CRM setup in Supabase first, then supabase-setup.sql from this site’s repository, and reload this page.",false,true,true);return;
+  }
+  const prof=p.data&&p.data[0];
+  if(!prof||prof.role!=="admin"){gate("This login can’t open Stock & Costing. Only the admin can. Log out, then log in with the admin account.",false,true,false);return}
+  try{await loadAll()}
+  catch(x){
+    const m=(((x&&x.message)||"")+" "+((x&&x.code)||"")).trim();
+    gate(/mfg_docs|PGRST20|42P01|schema cache/i.test(m)?"One step is left. Open Supabase, go to SQL Editor, paste everything from supabase-setup.sql in this site’s GitHub repository and click Run. Then reload this page.":NET.test(m)?"No connection. Check the internet and try again.":"The data couldn’t be loaded"+(m?" ("+m+")":"")+". Try again.",false,true,true);return;
+  }
+  entered=true;
+  $("who").textContent="Logged in as "+(prof.name||prof.email||session.user.email||"admin");
+  $("gate").hidden=true;$("app").hidden=false;
+  render();live();
+}
+async function start(){
+  const cfg=window.MFG_CONFIG||{};
+  if(!window.supabase){gate("The page couldn’t load fully. Check your internet connection and try again.",false,false,true);return}
+  if(!cfg.url||!cfg.key||/YOUR-/.test(cfg.url+cfg.key)){gate("Setup is not finished. Open config.js in the GitHub repository and paste your Supabase project URL and publishable key. The steps are in README.md.",false,false,false);return}
+  sb=window.supabase.createClient(cfg.url,cfg.key);
+  let s=null;
+  try{s=(await sb.auth.getSession()).data.session}catch(e){}
+  if(s)enter(s);else showLogin();
+}
+
+/* ---------- costing maths ---------- */
+function calc(p){
+  const resin=S.items.get(p.materialId), mb=S.items.get(p.mbId);
+  const cav=Math.max(1,num(p.cavities)||1);
+  const gross=num(p.partWt)+num(p.runnerWt)/cav*(1-Math.min(100,num(p.regrindPct))/100);
+  const resinKg=gross/1000, mbKg=mb?resinKg*num(p.mbPct)/100:0;
+  const material=resinKg*num(resin&&resin.rate), master=mbKg*num(mb&&mb.rate);
+  const up=num(p.uptimePct)||100;
+  const pph=num(p.cycle)>0?3600/num(p.cycle)*cav*up/100:0;
+  const machine=pph?num(p.machineRate)/pph:0, labour=pph?num(p.labourRate)/pph:0;
+  const mould=num(p.mouldLife)>0?num(p.mouldCost)/(num(p.mouldLife)*cav):0;
+  const y=1-Math.min(99,Math.max(0,num(p.rejectPct)))/100;
+  const reject=(material+master+machine+labour+mould)*(1/y-1);
+  const packing=num(p.packing);
+  const sub=material+master+machine+labour+mould+reject+packing;
+  const overhead=sub*num(p.overheadPct)/100, cost=sub+overhead, price=cost*(1+num(p.marginPct)/100);
+  return {resinKg,mbKg,material,master,machine,labour,mould,reject,packing,overhead,cost,price,pph,gross,resin,mb};
+}
+const CF=["name","materialId:c_material","mbId:c_mb","itemId:c_item","partWt","runnerWt","regrindPct:c_regrind","mbPct","cavities:c_cav","cycle","uptimePct:c_uptime","machineRate:c_machine","labourRate:c_labour","rejectPct:c_reject","mouldCost","mouldLife","packing","overheadPct:c_overhead","marginPct:c_margin"]
+  .map(s=>{const[k,id]=s.split(":");return[k,id||"c_"+k]});
+const TEXT=new Set(["name","materialId","mbId","itemId"]);
+function readForm(){const p={};for(const[k,id]of CF)p[k]=TEXT.has(k)?$(id).value.trim():num($(id).value);return p}
+/* Selects remember the value they should show (dataset.want), so a saved part keeps its resin even if the stock list arrives after the part does. */
+function loadForm(p){for(const[k,id]of CF){const el=$(id),v=p&&p[k]!=null?String(p[k]):"";if(el.tagName==="SELECT")el.dataset.want=v;el.value=v}}
+const BLANK={name:"",materialId:"",mbId:"",itemId:"",partWt:"",runnerWt:"",regrindPct:0,mbPct:0,cavities:1,cycle:"",uptimePct:85,machineRate:"",labourRate:"",rejectPct:2,mouldCost:"",mouldLife:"",packing:0,overheadPct:10,marginPct:15};
+
+/* ---------- rendering ---------- */
+function fill(sel,opts,keep){const v=keep!==undefined?keep:sel.dataset.want!==undefined?sel.dataset.want:sel.value;sel.innerHTML=opts.map(([val,l])=>`<option value="${esc(val)}">${esc(l)}</option>`).join("");if(opts.some(o=>o[0]===v))sel.value=v}
+const itemsBy=f=>[...S.items].filter(([,i])=>f(i)).sort((a,b)=>a[1].name.localeCompare(b[1].name));
+const status=i=>num(i.qty)<=0?["out","Out of stock"]:num(i.reorder)>0&&num(i.qty)<=num(i.reorder)?["low","Reorder"]:["ok","OK"];
+
+function render(){renderTiles();renderStock();renderCostLists();renderCost();renderLedger();
+  $("exnote").hidden=![...S.items.values(),...S.parts.values(),...S.txns.values()].some(x=>x.example)}
+
+function renderTiles(){
+  const items=[...S.items.values()], ym=today().slice(0,7);
+  const val=items.reduce((a,i)=>a+Math.max(0,num(i.qty))*num(i.rate),0);
+  const low=items.filter(i=>status(i)[0]!=="ok");
+  let prod=0,pcs=0,buy=0;
+  for(const t of S.txns.values()){if(String(t.date).slice(0,7)!==ym)continue;
+    if(t.type==="Production output"){prod+=num(t.amount);pcs+=num(t.qty)}
+    if(t.type==="Purchase")buy+=num(t.amount)}
+  $("tiles").innerHTML=
+   `<div class="tile"><small>Stock value</small><b>${inr0.format(val)}</b><em>${items.length} item${items.length===1?"":"s"}</em></div>
+    <div class="tile ${low.length?"alert":""}"><small>Need reorder</small><b>${low.length}</b><em>${low.length?esc(low.slice(0,2).map(i=>i.name).join(", "))+(low.length>2?" and "+(low.length-2)+" more":""):"All items above reorder level"}</em></div>
+    <div class="tile"><small>Production cost this month</small><b>${inr0.format(prod)}</b><em>${qf.format(pcs)} good pieces</em></div>
+    <div class="tile"><small>Purchases this month</small><b>${inr0.format(buy)}</b><em>Stock received</em></div>`;
+}
+
+function renderStock(){
+  fill($("s_cat"),[["","All categories"],...CATS.map(c=>[c,c])]);
+  const cat=$("s_cat").value, q=$("s_q").value.trim().toLowerCase();
+  const rows=itemsBy(i=>(!cat||i.cat===cat)&&(!q||i.name.toLowerCase().includes(q)));
+  $("stockrows").innerHTML=rows.length?rows.map(([id,i])=>{const[s,l]=status(i);
+    return `<tr class="row"><td><b>${esc(i.name)}</b> ${i.example?'<span class="pill ex">example</span>':""}</td><td>${esc(i.cat)}</td>
+    <td class="n">${qf.format(num(i.qty))} ${esc(i.unit)}<span class="sub">reorder at ${qf.format(num(i.reorder))}</span></td>
+    <td class="n">${inr.format(num(i.rate))}</td><td class="n">${inr.format(Math.max(0,num(i.qty))*num(i.rate))}</td>
+    <td><span class="pill ${s}">${l}</span></td>
+    <td><div class="acts"><button class="sm" data-in="${esc(id)}">Stock in</button><button class="sm" data-out="${esc(id)}">Stock out</button><button class="sm" data-edit="${esc(id)}">Edit cost</button></div></td></tr>`}).join("")
+   :`<tr><td colspan="7" class="empty">${S.items.size?"No items match this filter.":"No stock items yet. Add your resins, masterbatch, inserts, packaging and finished parts to start."
+      +(S.parts.size||S.txns.size?"":'<br><button class="sm" data-sample style="margin-top:10px">Load sample data to try it</button>')}</td></tr>`;
+}
+
+function renderCostLists(){
+  const parts=[...S.parts].sort((a,b)=>a[1].name.localeCompare(b[1].name));
+  fill($("c_pick"),[["",parts.length?"Open a saved part":"No saved parts yet"],...parts.map(([id,p])=>[id,p.name+(p.example?" (example)":"")])],cur||"");
+  fill($("c_material"),[["","Choose resin"],...itemsBy(i=>i.cat==="Resin").map(([id,i])=>[id,i.name+"  ·  "+inr.format(num(i.rate))+"/"+i.unit])]);
+  fill($("c_mb"),[["","None"],...itemsBy(i=>i.cat==="Masterbatch").map(([id,i])=>[id,i.name+"  ·  "+inr.format(num(i.rate))+"/"+i.unit])]);
+  fill($("c_item"),[["","Not linked to stock"],...itemsBy(i=>i.cat==="Finished part").map(([id,i])=>[id,i.name])]);
+  $("c_del").hidden=!cur;
+}
+const SEG=[["material","Resin","#3d7ea6"],["master","Masterbatch","#7b6cb0"],["machine","Machine","#c2622d"],["labour","Labour","#d39b2a"],["mould","Mould amortisation","#4d9a7a"],["reject","Rejection loss","#b84a4a"],["packing","Packing","#8a8f98"],["overhead","Overhead","#5f6f80"]];
+function renderCost(){
+  const p=readForm(), c=calc(p), tot=c.cost||1;
+  $("c_stack").innerHTML=SEG.map(([k,,col])=>`<span style="width:${(c[k]/tot*100).toFixed(2)}%;background:${col}"></span>`).join("");
+  $("c_lines").innerHTML=SEG.map(([k,l,col])=>`<div><span><i style="background:${col}"></i>${l}</span><span>${inr.format(c[k])}</span></div>`).join("")
+   +`<div class="tot"><span>Cost per piece</span><span>${inr.format(c.cost)}</span></div>
+     <div class="sell"><span>Selling price at ${qf.format(num(p.marginPct))}% margin</span><span>${inr.format(c.price)}</span></div>`;
+  $("c_facts").innerHTML=
+   `<div><small>Output</small><b>${qf.format(Math.round(c.pph))} pcs/hr</b></div>
+    <div><small>Resin per 1,000 pcs</small><b>${qf.format(r2(c.resinKg*1000))} kg</b></div>
+    <div><small>Net shot weight per piece</small><b>${qf.format(r2(c.gross))} g</b></div>
+    <div><small>Cost per 1,000 pcs</small><b>${inr0.format(c.cost*1000)}</b></div>`;
+}
+
+function renderLedger(){
+  fill($("l_type"),[["","All types"],...Object.keys(TYPES).map(t=>[t,t])]);
+  fill($("l_item"),[["","All items"],...itemsBy(()=>true).map(([id,i])=>[id,i.name])]);
+  const ty=$("l_type").value, it=$("l_item").value, mo=$("l_month").value;
+  const rows=[...S.txns].filter(([,t])=>(!ty||t.type===ty)&&(!it||t.itemId===it)&&(!mo||String(t.date).slice(0,7)===mo))
+    .sort((a,b)=>String(b[1].date).localeCompare(String(a[1].date))||num(b[1].ts)-num(a[1].ts));
+  let vin=0,vout=0;
+  for(const[,t]of rows){const q=num(t.qty);if(q>0)vin+=num(t.amount);if(q<0)vout+=num(t.amount)}
+  const shown=rows.slice(0,500);
+  $("txnrows").innerHTML=shown.length?shown.map(([id,t])=>{const q=num(t.qty);
+    return `<tr class="row"><td>${esc(t.date)}</td><td>${esc(t.type)} ${t.example?'<span class="pill ex">example</span>':""}</td><td>${esc(t.itemName)}</td>
+    <td class="n ${q>0?"in":q<0?"outq":""}">${q>0?"+":""}${q?qf.format(q):"–"} ${q?esc(t.unit||""):""}</td>
+    <td class="n">${inr.format(num(t.rate))}</td><td class="n">${t.type==="Rate change"?"–":inr.format(num(t.amount))}</td>
+    <td>${esc(t.ref||"")}</td><td><div class="acts"><button class="sm danger" data-deltxn="${esc(id)}">Delete</button></div></td></tr>`}).join("")
+   :`<tr><td colspan="8" class="empty">${S.txns.size?"No transactions match this filter.":"No transactions yet. Purchases, issues, production runs and sales will appear here."}</td></tr>`;
+  $("l_tot").textContent=rows.length?`${rows.length} transaction${rows.length===1?"":"s"}`+(rows.length>shown.length?`, showing the newest ${shown.length}`:"")
+    +`. Value in ${inr.format(vin)}, value out ${inr.format(vout)}.`+(S.txns.size>=TXN_MAX?" Only the latest 5,000 transactions are loaded.":""):"";
+  renderLedger.rows=rows;
+}
+
+/* ---------- views ---------- */
+function route(){const v=["stock","costing","ledger"].includes(location.hash.slice(1))?location.hash.slice(1):"stock";
+  for(const n of ["stock","costing","ledger"])$("v-"+n).hidden=n!==v;
+  document.querySelectorAll("nav a").forEach(a=>a.classList.toggle("on",a.dataset.v===v))}
+window.addEventListener("hashchange",route);
+
+/* ---------- item dialog ---------- */
+function openItem(id){editItem=id||null;const i=id?S.items.get(id):null;
+  $("di_title").textContent=i?"Edit item and cost":"Add item";
+  fill($("i_cat"),CATS.map(c=>[c,c]),i?i.cat:"Resin");
+  $("i_name").value=i?i.name:"";$("i_unit").value=i?i.unit:"kg";$("i_rate").value=i?i.rate:"";$("i_reorder").value=i?i.reorder:"";$("i_open").value="";
+  $("i_openwrap").hidden=!!i;$("i_del").hidden=!i;$("i_del").textContent="Delete item";$("d_item").showModal()}
+$("f_item").addEventListener("submit",e=>{e.preventDefault();
+  const d={name:$("i_name").value.trim(),cat:$("i_cat").value,unit:$("i_unit").value,rate:r4(num($("i_rate").value)),reorder:r3(num($("i_reorder").value))};
+  if(!d.name)return;
+  guard(e.submitter||e.target.querySelector("button.pri"),async()=>{
+    if(editItem){const old=S.items.get(editItem)||{};await patch("items",editItem,d);
+      if(num(old.rate)!==d.rate)await post([{t:{date:today(),type:"Rate change",itemId:editItem,itemName:d.name,unit:d.unit,qty:0,rate:d.rate,amount:0,ref:"Cost changed from "+inr.format(num(old.rate))+" to "+inr.format(d.rate)}}]);
+      toast("Item updated");
+    }else{const id=uid(),open=r3(num($("i_open").value));await put("items",id,{...d,qty:0});
+      if(open>0)await post([{t:{date:today(),type:"Opening",itemId:id,itemName:d.name,unit:d.unit,qty:open,rate:d.rate,amount:r2(open*d.rate),ref:"Opening stock"}}]);
+      toast("Item added")}
+    $("d_item").close();
+  })});
+$("i_del").addEventListener("click",()=>{const b=$("i_del");if(b.textContent!=="Confirm delete"){b.textContent="Confirm delete";return}
+  guard(b,async()=>{await del("items",editItem);$("d_item").close();toast("Item deleted. Its past transactions stay in the ledger.")})});
+
+/* ---------- transaction dialog ---------- */
+function openTxn(itemId,type){
+  if(!S.items.size){toast("Add a stock item first.");return}
+  fill($("t_type"),MANUAL.map(t=>[t,t]),type||"Purchase");
+  fill($("t_item"),itemsBy(()=>true).map(([id,i])=>[id,i.name+"  ("+qf.format(num(i.qty))+" "+i.unit+")"]),itemId);
+  $("t_date").value=today();$("t_qty").value="";$("t_ref").value="";$("t_avg").checked=true;txnSync(true);$("d_txn").showModal()}
+function txnSync(setRate){const i=S.items.get($("t_item").value),ty=$("t_type").value;
+  if(i&&setRate)$("t_rate").value=i.rate;
+  $("t_avgwrap").hidden=ty!=="Purchase";
+  $("t_qty").min=ty==="Adjustment"?"":"0";
+  const q=num($("t_qty").value),sign=TYPES[ty]||Math.sign(q)||1;
+  $("t_hint").className="hint wide"+(i&&sign<0&&Math.abs(q)>num(i.qty)?" w":"");
+  $("t_hint").textContent=!i?"":ty==="Adjustment"?"Enter a negative quantity to reduce stock.":sign<0&&Math.abs(q)>num(i.qty)?"This is more than the "+qf.format(num(i.qty))+" "+i.unit+" in stock.":"Stock after this entry: "+qf.format(r3(num(i.qty)+sign*Math.abs(q)))+" "+i.unit+"."}
+$("t_item").addEventListener("change",()=>txnSync(true));$("t_type").addEventListener("change",()=>txnSync(false));$("t_qty").addEventListener("input",()=>txnSync(false));
+$("f_txn").addEventListener("submit",e=>{e.preventDefault();
+  const id=$("t_item").value,i=S.items.get(id),ty=$("t_type").value;let q=r3(num($("t_qty").value));const rate=r4(num($("t_rate").value));
+  if(!i||!q)return;
+  if(ty!=="Adjustment")q=Math.abs(q)*TYPES[ty];
+  guard(e.submitter||e.target.querySelector("button.pri"),async()=>{
+    await post([{t:{date:$("t_date").value,type:ty,itemId:id,itemName:i.name,unit:i.unit,qty:q,rate,amount:r2(Math.abs(q)*rate),ref:$("t_ref").value.trim()},
+      avg:ty==="Purchase"&&$("t_avg").checked}]);
+    $("d_txn").close();toast("Transaction recorded")})});
+
+/* ---------- costing actions ---------- */
+$("cform").addEventListener("change",e=>{if(e.target.tagName==="SELECT")e.target.dataset.want=e.target.value});
+$("cform").addEventListener("input",renderCost);
+$("c_pick").addEventListener("change",()=>{cur=$("c_pick").value||null;loadForm(cur?S.parts.get(cur):BLANK);renderCostLists();renderCost()});
+$("c_new").addEventListener("click",()=>{cur=null;loadForm(BLANK);renderCostLists();renderCost();$("c_name").focus()});
+$("c_save").addEventListener("click",()=>{const p=readForm();if(!p.name){toast("Give the part a name first.");$("c_name").focus();return}
+  guard($("c_save"),async()=>{const id=cur||uid();await put("parts",id,p);cur=id;renderCostLists();toast("Costing sheet saved")})});
+$("c_del").addEventListener("click",()=>{const b=$("c_del");if(b.textContent!=="Confirm delete"){b.textContent="Confirm delete";setTimeout(()=>b.textContent="Delete part",4000);return}
+  b.textContent="Delete part";guard(b,async()=>{const id=cur;await del("parts",id);cur=null;loadForm(BLANK);renderCostLists();renderCost();toast("Part deleted")})});
+
+function runPlan(){const p=readForm(),good=Math.max(0,Math.round(num($("r_good").value))),rej=Math.max(0,Math.round(num($("r_rej").value))),tot=good+rej;
+  const c=calc({...p,rejectPct:tot?rej/tot*100:0});return{p,c,good,rej,tot,resinKg:r3(tot*c.resinKg),mbKg:r3(tot*c.mbKg)}}
+function runSync(){const{p,c,good,resinKg,mbKg}=runPlan();const h=$("r_hint");
+  if(!good){h.className="hint wide";h.textContent="Rejected pieces default to the rejection % on the sheet.";return}
+  const short=c.resin&&resinKg>num(c.resin.qty);
+  h.className="hint wide"+(short?" w":"");
+  h.textContent=`Uses ${qf.format(resinKg)} kg resin`+(mbKg?` and ${qf.format(mbKg)} kg masterbatch`:"")+`. Cost ${inr.format(c.cost)} per good piece, ${inr.format(c.cost*good)} for the run.`
+    +(short?` Only ${qf.format(num(c.resin.qty))} kg of resin is in stock.`:"")+(p.itemId?"":" This part is not linked to a finished stock item, so only material is deducted.")}
+$("c_run").addEventListener("click",()=>{const p=readForm();if(!p.name||!p.materialId){toast("Name the part and choose its resin first.");return}
+  $("r_date").value=today();$("r_good").value="";$("r_rej").value="";$("r_ref").value="";runSync();$("d_run").showModal()});
+$("r_good").addEventListener("input",()=>{const p=readForm(),g=num($("r_good").value),y=1-Math.min(99,num(p.rejectPct))/100;$("r_rej").value=g?Math.round(g/y-g):"";runSync()});
+$("r_rej").addEventListener("input",runSync);
+/* The transactions of one production run: resin out, masterbatch out, good pieces in at their cost. */
+function runTxns(p,c,good,resinKg,mbKg,date,ref,extra){
+  const list=[],fin=S.items.get(p.itemId);
+  if(c.resin)list.push({t:{date,type:"Issue to production",itemId:p.materialId,itemName:c.resin.name,unit:c.resin.unit,qty:-resinKg,rate:num(c.resin.rate),amount:r2(resinKg*num(c.resin.rate)),ref,...extra}});
+  if(c.mb&&mbKg>0)list.push({t:{date,type:"Issue to production",itemId:p.mbId,itemName:c.mb.name,unit:c.mb.unit,qty:-mbKg,rate:num(c.mb.rate),amount:r2(mbKg*num(c.mb.rate)),ref,...extra}});
+  list.push({t:{date,type:"Production output",itemId:fin?p.itemId:"",itemName:fin?fin.name:p.name,unit:fin?fin.unit:"pcs",qty:good,rate:r4(c.cost),amount:r2(c.cost*good),ref,
+    breakdown:Object.fromEntries(SEG.map(([k])=>[k,r2(c[k]*good)])),...extra},avg:!!fin});
+  return list;
+}
+$("f_run").addEventListener("submit",e=>{e.preventDefault();
+  const{p,c,good,rej,resinKg,mbKg}=runPlan();if(!good)return;
+  const date=$("r_date").value,ref=[$("r_ref").value.trim(),p.name,good+" good"+(rej?", "+rej+" rejected":"")].filter(Boolean).join(" · ");
+  guard(e.submitter||e.target.querySelector("button.pri"),async()=>{
+    await post(runTxns(p,c,good,resinKg,mbKg,date,ref));
+    $("d_run").close();toast("Production run posted to stock and transactions")})});
+
+/* ---------- sample data, for a first look ---------- */
+async function loadSample(){
+  const day=n=>{const x=new Date();x.setDate(x.getDate()-n);return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")};
+  const ex={example:true},id={};
+  const I=(k,name,cat,unit,rate,reorder)=>({id:id[k]=uid(),coll:"items",data:{name,cat,unit,rate,reorder,qty:0,...ex}});
+  const rows=[I("pp","PP homopolymer H110MA","Resin","kg",106,500),I("abs","ABS natural","Resin","kg",165,400),I("mbk","Black masterbatch","Masterbatch","kg",210,25),
+    I("ins","Brass insert M4","Insert / hardware","pcs",2.4,5000),I("box","Corrugated box 400 x 300","Packaging","pcs",28,200),
+    I("fgsw","Switch housing, black","Finished part","pcs",0,2000),I("fgcap","Bottle cap 28 mm","Finished part","pcs",0,10000)];
+  const sw={name:"Switch housing, black",materialId:id.abs,mbId:id.mbk,itemId:id.fgsw,partWt:18.5,runnerWt:6,regrindPct:25,mbPct:2,cavities:2,cycle:28,uptimePct:85,machineRate:450,labourRate:90,rejectPct:3,mouldCost:450000,mouldLife:500000,packing:.35,overheadPct:12,marginPct:15,...ex};
+  const cap={name:"Bottle cap 28 mm",materialId:id.pp,mbId:"",itemId:id.fgcap,partWt:3.1,runnerWt:0,regrindPct:0,mbPct:0,cavities:8,cycle:12,uptimePct:88,machineRate:600,labourRate:90,rejectPct:1.5,mouldCost:900000,mouldLife:2000000,packing:.02,overheadPct:10,marginPct:12,...ex};
+  rows.push({id:uid(),coll:"parts",data:sw},{id:uid(),coll:"parts",data:cap});
+  await w(async()=>{ok(await sb.from(T).upsert(rows));for(const r of rows)S[r.coll].set(r.id,r.data)});
+  const tx=(n,type,k,qty,rate,ref,avg)=>{const i=S.items.get(id[k]);return{t:{date:day(n),type,itemId:id[k],itemName:i.name,unit:i.unit,qty,rate,amount:r2(Math.abs(qty)*rate),ref,...ex},avg:!!avg}};
+  await post([tx(21,"Opening","pp",1000,106,"Opening stock"),tx(21,"Opening","abs",600,165,"Opening stock"),tx(21,"Opening","mbk",40,210,"Opening stock"),
+    tx(21,"Opening","ins",6000,2.4,"Opening stock"),tx(21,"Opening","box",180,28,"Opening stock"),tx(16,"Purchase","pp",500,112,"Bill 2291, polymer supplier",true)]);
+  const run=async(p,n,good,rej,job)=>{const tot=good+rej,c=calc({...p,rejectPct:rej/tot*100});
+    await post(runTxns(p,c,good,r3(tot*c.resinKg),r3(tot*c.mbKg),day(n),[job,p.name,good+" good, "+rej+" rejected"].join(" · "),ex))};
+  await run(sw,12,12000,380,"Job 114");
+  await run(cap,8,150000,2300,"Job 115");
+  await post([tx(5,"Sale / dispatch","fgsw",-10500,9.2,"Invoice 0418"),tx(3,"Sale / dispatch","fgcap",-90000,.95,"Invoice 0421")]);
+}
+
+/* ---------- table actions ---------- */
+document.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;
+  if(b.dataset.close!==undefined)b.closest("dialog").close();
+  else if(b.dataset.in)openTxn(b.dataset.in,"Purchase");
+  else if(b.dataset.out)openTxn(b.dataset.out,(S.items.get(b.dataset.out)||{}).cat==="Finished part"?"Sale / dispatch":"Issue to production");
+  else if(b.dataset.edit)openItem(b.dataset.edit);
+  else if(b.dataset.deltxn){
+    if(b.textContent!=="Confirm"){b.textContent="Confirm";setTimeout(()=>{if(b.isConnected)b.textContent="Delete"},4000);return}
+    guard(b,async()=>{await delTxn(b.dataset.deltxn);toast("Transaction deleted and stock reversed")})}
+  else if(b.dataset.sample!==undefined)guard(b,async()=>{b.textContent="Loading sample data…";await loadSample();toast("Sample data loaded")});
+});
+$("b_newitem").addEventListener("click",()=>openItem());
+$("b_newtxn").addEventListener("click",()=>openTxn());$("b_newtxn2").addEventListener("click",()=>openTxn());
+["s_cat","s_q"].forEach(id=>$(id).addEventListener("input",renderStock));
+["l_type","l_item","l_month"].forEach(id=>$(id).addEventListener("input",renderLedger));
+$("exclear").addEventListener("click",()=>{const b=$("exclear");if(b.textContent!=="Confirm removal"){b.textContent="Confirm removal";setTimeout(()=>{if(!b.disabled)b.textContent="Remove example data"},5000);return}
+  guard(b,async()=>{
+    const gone=[];for(const col of ["txns","parts","items"])for(const[id,x]of S[col])if(x.example)gone.push([col,id]);
+    await w(async()=>{for(let i=0;i<gone.length;i+=100){const part=gone.slice(i,i+100);ok(await sb.from(T).delete().in("id",part.map(g=>g[1])));for(const[col,id]of part)S[col].delete(id)}});
+    if(cur&&!S.parts.has(cur)){cur=null;loadForm(BLANK)}
+    render();toast("Example data removed")}).then(()=>{b.textContent="Remove example data"})});
+$("b_csv").addEventListener("click",()=>{const q=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+  const csv=[["Date","Type","Item","Qty","Unit","Rate","Amount","Reference"].join(","),...(renderLedger.rows||[]).map(([,t])=>[t.date,t.type,t.itemName,t.qty,t.unit,t.rate,t.amount,t.ref].map(q).join(","))].join("\r\n");
+  download("moulding-transactions-"+today()+".csv","﻿"+csv,"text/csv;charset=utf-8")});
+$("b_backup").addEventListener("click",()=>{
+  download("moulding-backup-"+today()+".json",JSON.stringify({app:"Moulding Stock & Costing",exportedAt:new Date().toISOString(),
+    items:Object.fromEntries(S.items),parts:Object.fromEntries(S.parts),txns:Object.fromEntries(S.txns)},null,1),"application/json")});
+$("b_refresh").addEventListener("click",()=>refresh(true));
+$("b_logout").addEventListener("click",logout);
+$("g_out").addEventListener("click",logout);
+$("g_retry").addEventListener("click",()=>location.reload());
+$("loginForm").addEventListener("submit",submitLogin);
+
+loadForm(BLANK);route();start();
+</script>
+</body>
+</html>
