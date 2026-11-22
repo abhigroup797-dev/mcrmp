@@ -15,11 +15,35 @@ end
 $$;
 
 -- ---------- who may use Stock & Costing ----------
--- Only the admin, to start with. Costs and margins are in here.
-create or replace function public.mfg_can_use() returns boolean
+-- The admin always can. The admin gives other logins access from the Users tab of the site;
+-- those logins are listed in mfg_access. Costs and margins are in here, so nobody else gets in.
+create table if not exists public.mfg_access (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+alter table public.mfg_access enable row level security;
+
+create or replace function public.mfg_is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
   select coalesce((select role = 'admin' from public.profiles where id = auth.uid()), false)
 $$;
+
+create or replace function public.mfg_can_use() returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.mfg_is_admin() or exists (select 1 from public.mfg_access where user_id = auth.uid())
+$$;
+
+drop policy if exists "mfg access read" on public.mfg_access;
+create policy "mfg access read" on public.mfg_access for select to authenticated
+  using (user_id = auth.uid() or public.mfg_is_admin());
+
+drop policy if exists "mfg access give" on public.mfg_access;
+create policy "mfg access give" on public.mfg_access for insert to authenticated
+  with check (public.mfg_is_admin());
+
+drop policy if exists "mfg access remove" on public.mfg_access;
+create policy "mfg access remove" on public.mfg_access for delete to authenticated
+  using (public.mfg_is_admin());
 
 -- ---------- data (stock items, part costing sheets, transactions) ----------
 create table if not exists public.mfg_docs (
@@ -142,10 +166,11 @@ end
 $$;
 
 -- ---------- permissions for the website ----------
-revoke all on public.mfg_docs from anon;
+revoke all on public.mfg_docs, public.mfg_access from anon;
 revoke execute on function public.mfg_merge(text, jsonb), public.mfg_post(jsonb), public.mfg_delete_txn(text) from public, anon;
 grant select, insert, update, delete on public.mfg_docs to authenticated;
-grant execute on function public.mfg_can_use() to authenticated;
+grant select, insert, delete on public.mfg_access to authenticated;
+grant execute on function public.mfg_can_use(), public.mfg_is_admin() to authenticated;
 grant execute on function public.mfg_merge(text, jsonb), public.mfg_post(jsonb), public.mfg_delete_txn(text) to authenticated;
 
 -- ---------- live updates ----------

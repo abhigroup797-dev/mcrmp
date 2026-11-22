@@ -55,8 +55,9 @@ Open `https://mcrmp.arapvtltd.com` and log in with the admin email and password 
 
 ## Good to know
 
-- **Who can open it:** only the admin, because costs and margins are in here. Other Mould CRM logins see a message that they have no access. This is decided by the function `mfg_can_use()` in `supabase-setup.sql`.
-- **Passwords and new logins:** these are managed in Mould CRM. This site has no sign-up.
+- **Who can open it:** the admin always, plus anyone the admin gives access to in the **Users** tab of the site. The admin can also add a new user there. A person with access sees and changes everything, including costs.
+- **More than one resin:** on a costing sheet use "Add another resin" and give each resin its share in %. A production run takes each resin out of stock in that share.
+- **Passwords:** changed in Mould CRM, or by the admin in Supabase. The "Create admin account" form shows only while no admin exists.
 - **Stock changes only through transactions.** To correct a quantity, record an Adjustment. Deleting a transaction takes its stock change back.
 - **Sample data:** on an empty database the Stock tab offers "Load sample data to try it". The sample rows are marked `example` and one button removes them all.
 - **Phone shortcut:** open the site in Chrome, tap the three dots and choose **Add to Home screen**.

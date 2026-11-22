@@ -119,6 +119,10 @@ dialog::backdrop{background:rgba(10,16,22,.55)}
 .err{color:var(--bad);font-size:13.5px}
 .foot{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;color:var(--muted);font-size:13px}
 .foot .grp{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.rrow{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto;gap:10px;align-items:end;margin-bottom:8px}
+.rrow button{margin-bottom:1px}
+.uform{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end}
+.uform label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted);font-weight:500}
 /* Phone: tables become stacked cards, two summary tiles per row, larger touch targets */
 @media (max-width:640px){
   h1{font-size:26px}
@@ -160,6 +164,8 @@ dialog::backdrop{background:rgba(10,16,22,.55)}
   #txnrows td:nth-child(5)::before{content:"Rate "}
   .acts{justify-content:flex-start;padding-top:8px;gap:8px}
   #txnrows .acts{justify-content:flex-end;padding-top:0}
+  #userrows td{padding:2px 0}
+  #userrows td:first-child{font-size:16px;font-weight:600}
   .acts button.sm{padding:7px 12px;font-size:14px}
 }
 @media (prefers-reduced-motion:no-preference){button,nav a{transition:background .12s,border-color .12s}}
@@ -189,6 +195,7 @@ dialog::backdrop{background:rgba(10,16,22,.55)}
       <a href="#stock" data-v="stock">Stock</a>
       <a href="#costing" data-v="costing">Production cost</a>
       <a href="#ledger" data-v="ledger">Transactions</a>
+      <a href="#users" data-v="users" id="nav_users" hidden>Users</a>
     </nav>
   </header>
 
@@ -225,7 +232,8 @@ dialog::backdrop{background:rgba(10,16,22,.55)}
       <div class="form" id="cform">
         <label class="wide">Part name<input id="c_name" placeholder="e.g. Switch housing"></label>
         <fieldset class="wide"><legend>Material</legend><div class="form">
-          <label>Resin<select id="c_material"></select></label>
+          <div class="wide" id="c_resins"></div>
+          <div class="wide bar"><button type="button" class="sm" id="c_addresin">Add another resin</button><span class="hint" id="c_blendhint"></span></div>
           <label>Part weight (g)<input id="c_partWt" type="number" min="0" step="0.01"></label>
           <label>Runner weight per shot (g)<input id="c_runnerWt" type="number" min="0" step="0.01"></label>
           <label>Runner reused as regrind (%)<input id="c_regrind" type="number" min="0" max="100" step="1"></label>
@@ -278,6 +286,24 @@ dialog::backdrop{background:rgba(10,16,22,.55)}
       <tbody id="txnrows"></tbody>
     </table></div>
     <p class="hint" id="l_tot"></p>
+  </section>
+
+  <!-- USERS (admin only) -->
+  <section class="panel" id="v-users" hidden>
+    <div class="bar"><h2>Who can use Stock &amp; Costing</h2></div>
+    <p class="hint" id="u_note">The admin always has access. Give access to anyone else here. A person with access can see and change everything in Stock &amp; Costing, including costs.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Name</th><th>Email</th><th>Mould CRM panel</th><th>Stock &amp; Costing</th><th></th></tr></thead>
+      <tbody id="userrows"></tbody>
+    </table></div>
+    <h2>Add a new user</h2>
+    <form class="uform" id="f_user">
+      <label>Name<input id="u_name" required></label>
+      <label>Email<input id="u_email" type="email" autocomplete="off" required></label>
+      <label>Password (6 or more)<input id="u_pw" type="text" minlength="6" autocomplete="off" required></label>
+      <button class="pri">Add user with access</button>
+    </form>
+    <p class="hint">A new user gets Stock &amp; Costing only. To give them a Mould CRM panel too, set it in Mould CRM. Tell them the site address, their email and their password.</p>
   </section>
 
   <footer class="foot">
@@ -343,7 +369,8 @@ const TYPES={Opening:1,Purchase:1,"Issue to production":-1,"Production output":1
 const MANUAL=["Purchase","Sale / dispatch","Issue to production","Scrap","Adjustment","Opening"];
 
 const S={items:new Map(),parts:new Map(),txns:new Map()};
-let sb=null, cur=null, editItem=null, entered=false, busy=0;
+let sb=null, cur=null, editItem=null, entered=false, busy=0, isAdmin=false, people=[], access=new Set(), accessOk=true;
+let blend=[{id:"",pct:100}];   /* the resins of the costing sheet on screen: [{id, pct}] */
 
 function toast(m){const t=$("toast");t.textContent=m;t.style.display="block";clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display="none",3800)}
 const NET=/failed to fetch|networkerror|load failed|no connection/i;
@@ -484,16 +511,20 @@ async function enter(session){
     gate(NET.test(p.error.message||"")?"No connection. Check the internet and try again.":"The database is not set up yet. Run the Mould CRM setup in Supabase first, then supabase-setup.sql from this site’s repository, and reload this page.",false,true,true);return;
   }
   const prof=p.data&&p.data[0];
-  if(!prof||prof.role!=="admin"){gate("This login can’t open Stock & Costing. Only the admin can. Log out, then log in with the admin account.",false,true,false);return}
+  isAdmin=!!prof&&prof.role==="admin";
+  let allowed=isAdmin;
+  if(!allowed){try{const c=await sb.rpc("mfg_can_use");allowed=!c.error&&c.data===true}catch(x){}}
+  if(!allowed){gate("This login can’t open Stock & Costing yet. Ask the admin to give you access from the Users tab of this site, then log in again.",false,true,false);return}
   try{await loadAll()}
   catch(x){
     const m=(((x&&x.message)||"")+" "+((x&&x.code)||"")).trim();
     gate(/mfg_docs|PGRST20|42P01|schema cache/i.test(m)?"One step is left. Open Supabase, go to SQL Editor, paste everything from supabase-setup.sql in this site’s GitHub repository and click Run. Then reload this page.":NET.test(m)?"No connection. Check the internet and try again.":"The data couldn’t be loaded"+(m?" ("+m+")":"")+". Try again.",false,true,true);return;
   }
   entered=true;
-  $("who").textContent="Logged in as "+(prof.name||prof.email||session.user.email||"admin");
+  $("who").textContent="Logged in as "+((prof&&(prof.name||prof.email))||session.user.email||"user");
+  $("nav_users").hidden=!isAdmin;
   $("gate").hidden=true;$("app").hidden=false;
-  render();live();
+  route();render();live();if(isAdmin)loadUsers();
 }
 async function start(){
   const cfg=window.MFG_CONFIG||{};
@@ -507,11 +538,16 @@ async function start(){
 
 /* ---------- costing maths ---------- */
 function calc(p){
-  const resin=S.items.get(p.materialId), mb=S.items.get(p.mbId);
+  const mb=S.items.get(p.mbId);
+  const list=(p.resins&&p.resins.length?p.resins:[{id:p.materialId,pct:100}]).filter(r=>r&&r.id);
+  const totPct=list.reduce((a,r)=>a+Math.max(0,num(r.pct)),0)||1;
+  const resins=list.map(r=>({id:r.id,it:S.items.get(r.id),share:Math.max(0,num(r.pct))/totPct}));
+  const resin=resins.length?resins[0].it:undefined;
+  const resinRate=resins.reduce((a,r)=>a+r.share*num(r.it&&r.it.rate),0);
   const cav=Math.max(1,num(p.cavities)||1);
   const gross=num(p.partWt)+num(p.runnerWt)/cav*(1-Math.min(100,num(p.regrindPct))/100);
   const resinKg=gross/1000, mbKg=mb?resinKg*num(p.mbPct)/100:0;
-  const material=resinKg*num(resin&&resin.rate), master=mbKg*num(mb&&mb.rate);
+  const material=resinKg*resinRate, master=mbKg*num(mb&&mb.rate);
   const up=num(p.uptimePct)||100;
   const pph=num(p.cycle)>0?3600/num(p.cycle)*cav*up/100:0;
   const machine=pph?num(p.machineRate)/pph:0, labour=pph?num(p.labourRate)/pph:0;
@@ -521,14 +557,27 @@ function calc(p){
   const packing=num(p.packing);
   const sub=material+master+machine+labour+mould+reject+packing;
   const overhead=sub*num(p.overheadPct)/100, cost=sub+overhead, price=cost*(1+num(p.marginPct)/100);
-  return {resinKg,mbKg,material,master,machine,labour,mould,reject,packing,overhead,cost,price,pph,gross,resin,mb};
+  return {resinKg,mbKg,material,master,machine,labour,mould,reject,packing,overhead,cost,price,pph,gross,resin,resins,mb};
 }
-const CF=["name","materialId:c_material","mbId:c_mb","itemId:c_item","partWt","runnerWt","regrindPct:c_regrind","mbPct","cavities:c_cav","cycle","uptimePct:c_uptime","machineRate:c_machine","labourRate:c_labour","rejectPct:c_reject","mouldCost","mouldLife","packing","overheadPct:c_overhead","marginPct:c_margin"]
+const CF=["name","mbId:c_mb","itemId:c_item","partWt","runnerWt","regrindPct:c_regrind","mbPct","cavities:c_cav","cycle","uptimePct:c_uptime","machineRate:c_machine","labourRate:c_labour","rejectPct:c_reject","mouldCost","mouldLife","packing","overheadPct:c_overhead","marginPct:c_margin"]
   .map(s=>{const[k,id]=s.split(":");return[k,id||"c_"+k]});
 const TEXT=new Set(["name","materialId","mbId","itemId"]);
-function readForm(){const p={};for(const[k,id]of CF)p[k]=TEXT.has(k)?$(id).value.trim():num($(id).value);return p}
+function readForm(){const p={};for(const[k,id]of CF)p[k]=TEXT.has(k)?$(id).value.trim():num($(id).value);
+  p.resins=blend.filter(r=>r.id).map(r=>({id:r.id,pct:num(r.pct)}));p.materialId=p.resins.length?p.resins[0].id:"";return p}
 /* Selects remember the value they should show (dataset.want), so a saved part keeps its resin even if the stock list arrives after the part does. */
-function loadForm(p){for(const[k,id]of CF){const el=$(id),v=p&&p[k]!=null?String(p[k]):"";if(el.tagName==="SELECT")el.dataset.want=v;el.value=v}}
+function loadForm(p){for(const[k,id]of CF){const el=$(id),v=p&&p[k]!=null?String(p[k]):"";if(el.tagName==="SELECT")el.dataset.want=v;el.value=v}
+  blend=(p&&p.resins&&p.resins.length?p.resins:[{id:(p&&p.materialId)||"",pct:100}]).map(r=>({id:r.id||"",pct:r.pct}));renderBlend()}
+/* One row per resin: which resin and its share of the material. Shares are used in proportion, so 70 and 30 is the same as 7 and 3. */
+function renderBlend(){
+  const opts=itemsBy(i=>i.cat==="Resin");
+  $("c_resins").innerHTML=blend.map((r,n)=>`<div class="rrow"><label>Resin${blend.length>1?" "+(n+1):""}<select data-r="id" data-n="${n}"><option value="">Choose resin</option>${
+    opts.map(([id,i])=>`<option value="${esc(id)}"${id===r.id?" selected":""}>${esc(i.name+"  ·  "+inr.format(num(i.rate))+"/"+i.unit)}</option>`).join("")}</select></label>
+    <label>Share (%)<input data-r="pct" data-n="${n}" type="number" min="0" step="0.1" value="${esc(r.pct)}"></label>
+    ${blend.length>1?`<button type="button" class="sm danger" data-rdel="${n}">Remove</button>`:"<span></span>"}</div>`).join("");
+  blendHint();
+}
+function blendHint(){const t=blend.filter(r=>r.id).reduce((a,r)=>a+num(r.pct),0),n=blend.filter(r=>r.id).length;
+  $("c_blendhint").textContent=n>1?(Math.abs(t-100)<0.05?"Shares add up to 100%.":"Shares add up to "+qf.format(t)+"%. They are used in proportion; make them total 100 to keep it clear."):""}
 const BLANK={name:"",materialId:"",mbId:"",itemId:"",partWt:"",runnerWt:"",regrindPct:0,mbPct:0,cavities:1,cycle:"",uptimePct:85,machineRate:"",labourRate:"",rejectPct:2,mouldCost:"",mouldLife:"",packing:0,overheadPct:10,marginPct:15};
 
 /* ---------- rendering ---------- */
@@ -571,7 +620,7 @@ function renderStock(){
 function renderCostLists(){
   const parts=[...S.parts].sort((a,b)=>a[1].name.localeCompare(b[1].name));
   fill($("c_pick"),[["",parts.length?"Open a saved part":"No saved parts yet"],...parts.map(([id,p])=>[id,p.name+(p.example?" (example)":"")])],cur||"");
-  fill($("c_material"),[["","Choose resin"],...itemsBy(i=>i.cat==="Resin").map(([id,i])=>[id,i.name+"  ·  "+inr.format(num(i.rate))+"/"+i.unit])]);
+  if(!$("c_resins").contains(document.activeElement))renderBlend();
   fill($("c_mb"),[["","None"],...itemsBy(i=>i.cat==="Masterbatch").map(([id,i])=>[id,i.name+"  ·  "+inr.format(num(i.rate))+"/"+i.unit])]);
   fill($("c_item"),[["","Not linked to stock"],...itemsBy(i=>i.cat==="Finished part").map(([id,i])=>[id,i.name])]);
   $("c_del").hidden=!cur;
@@ -611,8 +660,8 @@ function renderLedger(){
 }
 
 /* ---------- views ---------- */
-function route(){const v=["stock","costing","ledger"].includes(location.hash.slice(1))?location.hash.slice(1):"stock";
-  for(const n of ["stock","costing","ledger"])$("v-"+n).hidden=n!==v;
+function route(){const all=["stock","costing","ledger","users"],h=location.hash.slice(1),v=all.includes(h)&&(h!=="users"||isAdmin)?h:"stock";
+  for(const n of all)$("v-"+n).hidden=n!==v;
   document.querySelectorAll("nav a").forEach(a=>a.classList.toggle("on",a.dataset.v===v))}
 window.addEventListener("hashchange",route);
 
@@ -662,6 +711,9 @@ $("f_txn").addEventListener("submit",e=>{e.preventDefault();
 
 /* ---------- costing actions ---------- */
 $("cform").addEventListener("change",e=>{if(e.target.tagName==="SELECT")e.target.dataset.want=e.target.value});
+$("c_resins").addEventListener("input",e=>{const n=+e.target.dataset.n,k=e.target.dataset.r;if(k&&blend[n]){blend[n][k]=e.target.value;blendHint()}});
+$("c_resins").addEventListener("click",e=>{const b=e.target.closest("[data-rdel]");if(!b)return;blend.splice(+b.dataset.rdel,1);renderBlend();renderCost()});
+$("c_addresin").addEventListener("click",()=>{if(blend.length===1&&num(blend[0].pct)===100)blend[0].pct=50;blend.push({id:"",pct:blend.length===1?50:""});renderBlend();renderCost()});
 $("cform").addEventListener("input",renderCost);
 $("c_pick").addEventListener("change",()=>{cur=$("c_pick").value||null;loadForm(cur?S.parts.get(cur):BLANK);renderCostLists();renderCost()});
 $("c_new").addEventListener("click",()=>{cur=null;loadForm(BLANK);renderCostLists();renderCost();$("c_name").focus()});
@@ -674,18 +726,18 @@ function runPlan(){const p=readForm(),good=Math.max(0,Math.round(num($("r_good")
   const c=calc({...p,rejectPct:tot?rej/tot*100:0});return{p,c,good,rej,tot,resinKg:r3(tot*c.resinKg),mbKg:r3(tot*c.mbKg)}}
 function runSync(){const{p,c,good,resinKg,mbKg}=runPlan();const h=$("r_hint");
   if(!good){h.className="hint wide";h.textContent="Rejected pieces default to the rejection % on the sheet.";return}
-  const short=c.resin&&resinKg>num(c.resin.qty);
+  const lack=c.resins.filter(r=>r.it&&r3(resinKg*r.share)>num(r.it.qty)),short=lack.length>0;
   h.className="hint wide"+(short?" w":"");
   h.textContent=`Uses ${qf.format(resinKg)} kg resin`+(mbKg?` and ${qf.format(mbKg)} kg masterbatch`:"")+`. Cost ${inr.format(c.cost)} per good piece, ${inr.format(c.cost*good)} for the run.`
-    +(short?` Only ${qf.format(num(c.resin.qty))} kg of resin is in stock.`:"")+(p.itemId?"":" This part is not linked to a finished stock item, so only material is deducted.")}
-$("c_run").addEventListener("click",()=>{const p=readForm();if(!p.name||!p.materialId){toast("Name the part and choose its resin first.");return}
+    +(short?" Not enough in stock: "+lack.map(r=>r.it.name+" ("+qf.format(num(r.it.qty))+" kg, needs "+qf.format(r3(resinKg*r.share))+")").join(", ")+".":"")+(p.itemId?"":" This part is not linked to a finished stock item, so only material is deducted.")}
+$("c_run").addEventListener("click",()=>{const p=readForm();if(!p.name||!p.resins.length){toast("Name the part and choose its resin first.");return}
   $("r_date").value=today();$("r_good").value="";$("r_rej").value="";$("r_ref").value="";runSync();$("d_run").showModal()});
 $("r_good").addEventListener("input",()=>{const p=readForm(),g=num($("r_good").value),y=1-Math.min(99,num(p.rejectPct))/100;$("r_rej").value=g?Math.round(g/y-g):"";runSync()});
 $("r_rej").addEventListener("input",runSync);
 /* The transactions of one production run: resin out, masterbatch out, good pieces in at their cost. */
 function runTxns(p,c,good,resinKg,mbKg,date,ref,extra){
   const list=[],fin=S.items.get(p.itemId);
-  if(c.resin)list.push({t:{date,type:"Issue to production",itemId:p.materialId,itemName:c.resin.name,unit:c.resin.unit,qty:-resinKg,rate:num(c.resin.rate),amount:r2(resinKg*num(c.resin.rate)),ref,...extra}});
+  for(const r of c.resins){const kg=r3(resinKg*r.share);if(r.it&&kg>0)list.push({t:{date,type:"Issue to production",itemId:r.id,itemName:r.it.name,unit:r.it.unit,qty:-kg,rate:num(r.it.rate),amount:r2(kg*num(r.it.rate)),ref,...extra}})}
   if(c.mb&&mbKg>0)list.push({t:{date,type:"Issue to production",itemId:p.mbId,itemName:c.mb.name,unit:c.mb.unit,qty:-mbKg,rate:num(c.mb.rate),amount:r2(mbKg*num(c.mb.rate)),ref,...extra}});
   list.push({t:{date,type:"Production output",itemId:fin?p.itemId:"",itemName:fin?fin.name:p.name,unit:fin?fin.unit:"pcs",qty:good,rate:r4(c.cost),amount:r2(c.cost*good),ref,
     breakdown:Object.fromEntries(SEG.map(([k])=>[k,r2(c[k]*good)])),...extra},avg:!!fin});
@@ -752,6 +804,43 @@ $("b_logout").addEventListener("click",logout);
 $("g_out").addEventListener("click",logout);
 $("g_retry").addEventListener("click",()=>location.reload());
 $("loginForm").addEventListener("submit",submitLogin);
+
+/* ---------- users (admin only) ---------- */
+async function loadUsers(){
+  const a=await sb.from("profiles").select("id,name,email,role");
+  if(!a.error)people=a.data||[];
+  const b=await sb.from("mfg_access").select("user_id");
+  accessOk=!b.error;if(accessOk)access=new Set((b.data||[]).map(x=>x.user_id));
+  renderUsers();
+}
+function renderUsers(){
+  $("u_note").textContent=accessOk?"The admin always has access. Give access to anyone else here. A person with access can see and change everything in Stock & Costing, including costs."
+    :"One step is left for this tab: run the newest supabase-setup.sql from this site’s GitHub repository in Supabase (SQL Editor), then press Refresh.";
+  $("u_note").className="hint"+(accessOk?"":" w");
+  const rows=[...people].sort((x,y)=>(x.name||x.email||"").localeCompare(y.name||y.email||""));
+  $("userrows").innerHTML=rows.length?rows.map(u=>{const adm=u.role==="admin",has=adm||access.has(u.id);
+    return `<tr><td>${esc(u.name||"(no name)")}</td><td>${esc(u.email||"")}</td><td>${esc(adm?"Admin":u.role==="designer"?"Designer":u.role?String(u.role).replace(/^op:/,""):"No Mould CRM panel")}</td>
+    <td><span class="pill ${has?"ok":"ex"}">${adm?"Always (admin)":has?"Has access":"No access"}</span></td>
+    <td><div class="acts">${adm||!accessOk?"":`<button class="sm${has?" danger":""}" data-acc="${esc(u.id)}">${has?"Remove access":"Give access"}</button>`}</div></td></tr>`}).join("")
+   :'<tr><td colspan="5" class="empty">No users found.</td></tr>';
+}
+document.addEventListener("click",e=>{const b=e.target.closest("button[data-acc]");if(!b)return;const id=b.dataset.acc,has=access.has(id);
+  guard(b,async()=>{ok(has?await sb.from("mfg_access").delete().eq("user_id",id):await sb.from("mfg_access").insert({user_id:id}));
+    if(has)access.delete(id);else access.add(id);renderUsers();toast(has?"Access removed":"Access given")})});
+$("f_user").addEventListener("submit",e=>{e.preventDefault();
+  const name=$("u_name").value.trim(),email=$("u_email").value.trim(),pw=$("u_pw").value;
+  if(!name||!email||pw.length<6)return;
+  guard(e.submitter||e.target.querySelector("button.pri"),async()=>{
+    /* A second, throw-away connection creates the account, so the admin stays logged in here (Mould CRM adds employees the same way). */
+    const cfg=window.MFG_CONFIG||{};
+    const tmp=window.supabase.createClient(cfg.url,cfg.key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:"mfg-new-user"}});
+    const r=await tmp.auth.signUp({email:email,password:pw,options:{data:{name:name}}});
+    if(r.error)throw r.error;
+    const u=r.data&&r.data.user;
+    if(!u||!u.id||(u.identities&&!u.identities.length))throw{message:"this email already has an account. Find it in the list and press Give access."};
+    ok(await sb.from("mfg_access").insert({user_id:u.id}));
+    e.target.reset();await loadUsers();toast("User added with access")})});
+$("b_refresh").addEventListener("click",()=>{if(isAdmin)loadUsers()});
 
 loadForm(BLANK);route();start();
 </script>
