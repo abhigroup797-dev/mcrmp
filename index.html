@@ -171,6 +171,7 @@ dialog::backdrop{background:rgba(10,16,22,.55)}
     <h1>Moulding <span>Stock &amp; Costing</span></h1>
     <p class="msg" id="gateMsg">Loading…</p>
     <form id="loginForm" hidden>
+      <label id="g_nameL" hidden>Your name<input id="g_name" autocomplete="name"></label>
       <label>Email<input id="g_email" type="email" autocomplete="username" required></label>
       <label>Password<input id="g_pw" type="password" autocomplete="current-password" required></label>
       <p class="err" id="g_err" hidden></p>
@@ -437,17 +438,38 @@ function gate(msg,form,out,retry){
   $("gateMsg").textContent=msg;$("loginForm").hidden=!form;$("g_out").hidden=!out;$("g_retry").hidden=!retry;
 }
 async function logout(){try{await sb.auth.signOut()}catch(e){}location.reload()}
-function showLogin(){gate("Log in with the admin email and password you use for Mould CRM.",true,false,false)}
+/* The first account ever created in this Supabase project becomes the admin (the Mould CRM setup does that).
+   So the "create admin account" form is offered only while no admin exists; after that it is log in only. */
+let signupMode=false;
+async function showLogin(){
+  let r;
+  try{r=await sb.rpc("has_admin")}catch(x){r={error:{message:"no connection"}}}
+  if(r.error){
+    gate(NET.test(r.error.message||"")?"No connection. Check the internet and try again.":"The database is not set up yet. In Supabase, open SQL Editor and run the Mould CRM supabase-setup.sql first, then supabase-setup.sql from this site’s repository. Then reload this page.",false,false,true);return;
+  }
+  signupMode=r.data===false;
+  $("g_nameL").hidden=!signupMode;$("g_name").required=signupMode;
+  $("g_pw").autocomplete=signupMode?"new-password":"current-password";
+  $("g_btn").textContent=signupMode?"Create admin account":"Log in";
+  gate(signupMode?"No admin account exists yet. Create the admin account for the owner of the shop. It also works for Mould CRM.":"Log in with the admin email and password you use for Mould CRM.",true,false,false);
+}
 async function submitLogin(e){
   e.preventDefault();
-  const err=$("g_err"),btn=$("g_btn");
+  const err=$("g_err"),btn=$("g_btn"),email=$("g_email").value.trim(),pw=$("g_pw").value;
   err.hidden=true;btn.disabled=true;
   let r;
-  try{r=await sb.auth.signInWithPassword({email:$("g_email").value.trim(),password:$("g_pw").value})}catch(x){r={error:{message:"no connection"}}}
+  try{
+    r=signupMode?await sb.auth.signUp({email:email,password:pw,options:{data:{name:$("g_name").value.trim()}}})
+      :await sb.auth.signInWithPassword({email:email,password:pw});
+  }catch(x){r={error:{message:"no connection"}}}
   btn.disabled=false;
-  if(r.error||!r.data||!r.data.session){
-    const m=r.error?r.error.message||"":"";
-    err.textContent=/invalid/i.test(m)?"Wrong email or password.":NET.test(m)?"No connection. Check the internet and try again.":"Couldn’t log in"+(m?": "+m:".");
+  if(r.error){
+    const m=r.error.message||"";
+    err.textContent=NET.test(m)?"No connection. Check the internet and try again.":signupMode?"Couldn’t create the account: "+m:/invalid/i.test(m)?"Wrong email or password.":"Couldn’t log in"+(m?": "+m:".");
+    err.hidden=false;return;
+  }
+  if(!r.data||!r.data.session){
+    err.textContent=signupMode?"The account was created, but Supabase wants the email confirmed. Open the link in your email, or turn off “Confirm email” in Supabase (Authentication, Sign In / Providers, Email). Then reload this page and log in.":"Couldn’t log in.";
     err.hidden=false;return;
   }
   $("g_pw").value="";
